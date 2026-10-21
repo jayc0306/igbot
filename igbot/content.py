@@ -45,18 +45,22 @@ COMMON_RULES = f"""
 """.strip()
 
 CARD_SPEC = """
-카드뉴스 JSON:
+카드뉴스 JSON (레퍼런스: today.worthy):
 {
-  "cover_title": "커버 제목. \\n 으로 2~3줄, 줄당 10자 안팎",
-  "cover_image_query": "영어 키워드",
+  "cover_sub": "커버 첫 줄. 작은 글씨로 상황 설명, 22자 이내 (예: 22년 전 신입사원으로 들어간 회사)",
+  "cover_title": "커버 둘째 줄. 큰 글씨 한 방, 14자 이내, 핵심 단어 1개 **강조** (예: 회장님 **아들**이 됐다)",
   "slides": [
-    {"heading": "소제목 16자 이내", "body": "2~3문장, 문장마다 \\n, 전체 100자 이내", "image_query": "영어 키워드"}
+    {"kicker": "작은 라벨 14자 이내 (예: 신입사원에서 아들까지)",
+     "heading": "소제목. 2줄 이내(\\n), 줄당 14자 이내, 강조 1개 가능 (예: 주식 **10%**\\n이미 넘겨받았다)",
+     "body": "2~3문장, 문장마다 \\n, 전체 90자 이내. 구체적인 사실과 숫자",
+     "image_query": "이 장에 쓸 스톡 사진 영어 키워드"}
   ],
-  "share_target": "마지막 장 '___ 친구에게 보내주세요'에 들어갈 말. 이 소식을 궁금해할 사람, 10자 이내 (예: 파리 소식 궁금한, AI 좋아하는, 내 집 마련 고민하는)",
+  "share_target": "마지막 장 '___ 친구에게 보내주세요'에 들어갈 말, 위트 있게 14자 이내 (예: 회장님한테 입양 가고 싶은, 프랑스 사태 관심 있는)",
   "caption": "...",
   "hashtags": ["#...", "3~5개, 검색 많이 되는 핵심 키워드만"]
 }
-slides 3~6장. 흐름: 무슨 일 → 배경 → 핵심 숫자/장면 → 반응/영향 → 한 줄 정리.
+흐름: 무슨 일 → 배경 → 핵심 숫자/장면 → 반응/영향 → 한 줄 정리.
+slides 개수는 아래 지시를 정확히 따른다.
 """.strip()
 
 REEL_SPEC = """
@@ -192,11 +196,12 @@ def clean(text: str) -> str:
 
 
 def _clean_data(kind: str, d: dict) -> dict:
-    keys = ["cover_title", "caption", "share_target"] if kind == "card" else ["label", "title", "caption"]
+    keys = ["cover_sub", "cover_title", "caption", "share_target"] if kind == "card" else ["label", "title", "caption"]
     for k in keys:
         if k in d:
             d[k] = clean(d[k])
     for s in d.get("slides", []):
+        s["kicker"] = clean(s.get("kicker", ""))
         s["heading"] = clean(s.get("heading", ""))
         s["body"] = clean(s.get("body", ""))
     for s in d.get("scenes", []):
@@ -213,10 +218,10 @@ def generate(kind: str, source: str, media_note: str = "", photos: list[Path] | 
     if previous and feedback:
         text += (f"\n\n이전 원고:\n{json.dumps(previous, ensure_ascii=False)}"
                  f"\n\n수정 요청: {feedback}\n반영해서 전체 JSON을 다시 출력해.")
-    content = [_image_block(p) for p in (photos or [])[:2]] + [{"type": "text", "text": text}]
+    content = [_image_block(p) for p in (photos or [])[:10]] + [{"type": "text", "text": text}]
     data = _ask(COMMON_RULES + "\n\n" + spec, content)
     if kind == "card":
-        data["slides"] = data.get("slides", [])[:8]
+        data["slides"] = data.get("slides", [])[:9]
     else:
         data["scenes"] = data.get("scenes", [])[:7]
     return _clean_data(kind, data)

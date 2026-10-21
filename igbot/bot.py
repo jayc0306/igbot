@@ -14,7 +14,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from telegram import (InlineKeyboardButton as B, InlineKeyboardMarkup, InputMediaDocument,
-                      InputMediaPhoto, Update)
+                      InputMediaPhoto, InputMediaVideo, Update)
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
@@ -182,7 +182,9 @@ async def preview(ctx, jid):
     chat_id = job["chat_id"]
     try:
         if job["kind"] == "card":
-            await ctx.bot.send_media_group(chat_id, [InputMediaPhoto(p.read_bytes()) for p in job["files"]])
+            group = [InputMediaVideo(p.read_bytes(), supports_streaming=True, width=1080, height=1350)
+                     if p.suffix == ".mp4" else InputMediaPhoto(p.read_bytes()) for p in job["files"]]
+            await ctx.bot.send_media_group(chat_id, group)
         else:
             await ctx.bot.send_video(chat_id, job["files"][0].read_bytes(), supports_streaming=True,
                                      width=1080, height=1920)

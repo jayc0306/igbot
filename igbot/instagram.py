@@ -51,12 +51,16 @@ class Instagram:
     def publish_carousel(self, image_urls: list[str], caption: str) -> dict:
         if not 2 <= len(image_urls) <= 10:
             raise InstagramError("캐러셀은 2~10장이어야 합니다")
-        children = [
-            self._req("POST", f"{self.uid}/media", image_url=u, is_carousel_item="true")["id"]
-            for u in image_urls
-        ]
+        children = []
+        for u in image_urls:
+            if u.lower().endswith(".mp4"):
+                cid = self._req("POST", f"{self.uid}/media", media_type="VIDEO", video_url=u,
+                                is_carousel_item="true")["id"]
+            else:
+                cid = self._req("POST", f"{self.uid}/media", image_url=u, is_carousel_item="true")["id"]
+            children.append(cid)
         for c in children:
-            self._wait(c, timeout=120)
+            self._wait(c, timeout=600)
         cid = self._req("POST", f"{self.uid}/media", media_type="CAROUSEL",
                         children=",".join(children), caption=caption)["id"]
         self._wait(cid, timeout=120)

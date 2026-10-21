@@ -224,19 +224,17 @@ def fetch_x(url: str, out_dir: Path) -> tuple[list[Media], str, str]:
     name = f"X @{(tweet.get('author') or {}).get('screen_name') or user}"
     credit = f"Visual reference: {name}"
     media = tweet.get("media") or {}
+    items = media.get("all") or ((media.get("photos") or []) + (media.get("videos") or []))
     out_dir.mkdir(parents=True, exist_ok=True)
     result = []
-    for i, v in enumerate(media.get("videos") or []):
-        if v.get("url"):
-            p = _download(v["url"], out_dir / f"x_{sid}_{i}.mp4")
-            if p:
-                result.append(Media(p, "video", credit))
-    if not result:
-        for i, ph in enumerate((media.get("photos") or [])[:4]):
-            if ph.get("url"):
-                p = _download(ph["url"], out_dir / f"x_{sid}_{i}.jpg")
-                if p:
-                    result.append(Media(p, "photo", credit))
+    for i, it in enumerate(items[:10]):  # 트윗에 올라온 순서 그대로 (사진/영상 섞여도)
+        url = it.get("url")
+        if not url:
+            continue
+        is_video = it.get("type") in ("video", "gif")
+        p = _download(url, out_dir / f"x_{sid}_{i}.{'mp4' if is_video else 'jpg'}")
+        if p:
+            result.append(Media(p, "video" if is_video else "photo", credit))
     return result, text, name
 
 

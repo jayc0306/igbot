@@ -271,7 +271,7 @@ def card_outro(photo: Path | None, share_target: str, out: Path):
     _center(d, cy + size / 2 + 86, config.BRAND_HANDLE, font("Regular", 32), (190, 190, 190, 255))
 
     target = (share_target or "이 소식 궁금한").strip()
-    headline = f"{target} 친구에게\n보내주세요"
+    headline = f"{target} 친구에게\n**보내주세요**"
     hf, lines, hs, hh = fit_text(headline, "Black", 78, 52, CARD_W - 120, 220, lh=1.28)
     hy = 760
     draw_block(d, 60, hy, lines, hf, hs, 1.28, "#FFFFFF", config.COLOR_ACCENT, align="center", box_w=CARD_W - 120)
