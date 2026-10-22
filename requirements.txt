@@ -1,0 +1,12 @@
+python-telegram-bot[job-queue]==21.6
+anthropic==1.15.0
+httpx==0.28.1
+boto3==1.43.115
+edge-tts==7.3.1
+python-dotenv==1.2.2
+trafilatura==2.3.1
+telethon==1.45.0
+tzdata
+Pillow>=10.0
+imageio-ffmpeg
+yt-dlp
