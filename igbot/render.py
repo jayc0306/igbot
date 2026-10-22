@@ -134,6 +134,33 @@ def cover_fit(path: Path, w: int, h: int) -> Image.Image:
     return ImageOps.fit(img, (w, h), Image.LANCZOS, centering=(0.5, 0.4))
 
 
+def needs_contain(src_w: int, src_h: int, box_w: int, box_h: int) -> bool:
+    """비율이 많이 다르면 자르지 않고 통째로 보여줌 (가로 캡처, 16:9 영상 등)."""
+    if not src_w or not src_h:
+        return False
+    r = (src_w / src_h) / (box_w / box_h)
+    return not (0.85 <= r <= 1.18)
+
+
+def blurred_fill(img: Image.Image, w: int, h: int) -> Image.Image:
+    from PIL import ImageFilter
+    bg = ImageOps.fit(img, (w, h), Image.LANCZOS).filter(ImageFilter.GaussianBlur(28))
+    return Image.blend(bg, Image.new("RGB", (w, h), (0, 0, 0)), 0.45)
+
+
+def smart_fit(path: Path, w: int, h: int, fg_h: int | None = None) -> Image.Image:
+    """w x h 이미지 반환. 비율 비슷하면 꽉 채우고, 아니면 사진 전체를 보여주고 남는 곳은 흐린 배경.
+    fg_h: 사진을 넣을 위쪽 영역 높이 (커버에서 아래 글자 자리 비우기용)."""
+    img = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+    fg_h = fg_h or h
+    if not needs_contain(img.width, img.height, w, h):
+        return ImageOps.fit(img, (w, h), Image.LANCZOS, centering=(0.5, 0.4))
+    canvas = blurred_fill(img, w, h)
+    fg = ImageOps.contain(img, (w, fg_h), Image.LANCZOS)
+    canvas.paste(fg, ((w - fg.width) // 2, (fg_h - fg.height) // 2))
+    return canvas
+
+
 def fallback_bg(w: int, h: int) -> Image.Image:
     """사진이 없을 때: 어두운 그라데이션 + 강조색 글로우."""
     img = Image.new("RGB", (w, h), (18, 18, 20))

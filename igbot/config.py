@@ -32,6 +32,7 @@ NOTIFY_CHAT_ID = int(os.getenv("NOTIFY_CHAT_ID") or (ALLOWED_USER_IDS[0] if ALLO
 # --- Claude ---
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5-5")
+CONTEXT_SEARCH = _bool("CONTEXT_SEARCH", True)  # 원고 쓸 때 웹 검색으로 사건 배경 확인
 
 # --- Instagram ---
 IG_USER_ID = os.getenv("IG_USER_ID", "")

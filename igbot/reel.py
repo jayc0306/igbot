@@ -9,6 +9,7 @@ from pathlib import Path
 
 import config
 from ffbin import FFMPEG, duration, has_audio
+from card import media_filter
 import render
 from media import Media, video_duration
 
@@ -39,13 +40,14 @@ def _scene_clip(bg: Path, media_y: int, media: Media, overlay: Path, audio: Path
     frames = int(dur * FPS) + 2
     if media.kind == "video":
         m_in = ["-stream_loop", "-1", "-ss", f"{start:.2f}", "-i", str(media.path)]
-        m_f = (f"[1:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-               f"setsar=1,fps={FPS}[m]")
+        m_f = media_filter(media.path, W, H)
     else:
-        m_in = ["-i", str(media.path)]
+        panel = out.with_name(out.stem + "_panel.jpg")
+        render.smart_fit(media.path, W, H).save(panel, "JPEG", quality=93)
+        m_in = ["-i", str(panel)]
         bw, bh = int(W * 1.5), int(H * 1.5)
         m_f = (f"[1:v]scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh},"
-               f"zoompan=z='min(zoom+0.0007,1.12)':d={frames}:x='iw/2-(iw/zoom/2)':"
+               f"zoompan=z='min(zoom+0.0004,1.05)':d={frames}:x='iw/2-(iw/zoom/2)':"
                f"y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS},setsar=1[m]")
     a_in = ["-i", str(audio)] if audio else ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
 
@@ -147,13 +149,14 @@ def _framed_clip(bg: Path, media_y: int, media: Media, overlay: Path, dur: float
     frames = int(dur * FPS) + 2
     if media.kind == "video":
         m_in = ["-i", str(media.path)]
-        m_f = (f"[1:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-               f"setsar=1,fps={FPS}[m]")
+        m_f = media_filter(media.path, W, H)
     else:
-        m_in = ["-i", str(media.path)]
+        panel = out.with_name(out.stem + "_panel.jpg")
+        render.smart_fit(media.path, W, H).save(panel, "JPEG", quality=93)
+        m_in = ["-i", str(panel)]
         bw, bh = int(W * 1.5), int(H * 1.5)
         m_f = (f"[1:v]scale={bw}:{bh}:force_original_aspect_ratio=increase,crop={bw}:{bh},"
-               f"zoompan=z='min(zoom+0.0007,1.12)':d={frames}:x='iw/2-(iw/zoom/2)':"
+               f"zoompan=z='min(zoom+0.0004,1.05)':d={frames}:x='iw/2-(iw/zoom/2)':"
                f"y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS},setsar=1[m]")
     fade = f",afade=t=out:st={max(0, dur - 1.2):.2f}:d=1.2" if cut else ""  # 잘린 영상은 소리 자연스럽게 줄이기
     if source_audio:

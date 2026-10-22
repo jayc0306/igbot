@@ -11,11 +11,12 @@ from PIL import Image, ImageDraw
 
 import config
 import render
-from ffbin import FFMPEG, duration, has_audio
+from ffbin import FFMPEG, duration, has_audio, video_size
 from media import Media
 
 W, H = render.CARD_W, render.CARD_H
 SLIDE_MEDIA_H = 860
+COVER_FG_H = 980  # 커버에서 가로 사진은 이 높이 안에 통째로 (아래는 제목 자리)
 MAX_VIDEO_SEC = 60
 TG_LIMIT = 45 * 1024 * 1024
 
@@ -82,7 +83,7 @@ def cover_overlay(sub: str, title: str, credit: str) -> Image.Image:
 
 def slide_overlay(kicker: str, heading: str, body: str, credit: str) -> Image.Image:
     ov = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    _gradient(ov, SLIDE_MEDIA_H - 300, SLIDE_MEDIA_H, 255)
+    _gradient(ov, SLIDE_MEDIA_H - 170, SLIDE_MEDIA_H, 255)
     ImageDraw.Draw(ov).rectangle((0, SLIDE_MEDIA_H, W, H), fill=(0, 0, 0, 255))
     d = ImageDraw.Draw(ov)
     x, box = 66, W - 132
@@ -96,7 +97,7 @@ def slide_overlay(kicker: str, heading: str, body: str, credit: str) -> Image.Im
         for p in paras:
             blines += render.rich_wrap(p, bf, box)
         bh = int(len(blines) * bs * 1.55)
-        if bh <= 230 or bs <= 28:
+        if bh <= 170 or bs <= 28:
             break
         bs -= 2
     kf = render.font("Bold", 32)
@@ -118,11 +119,12 @@ def slide_overlay(kicker: str, heading: str, body: str, credit: str) -> Image.Im
 
 # ---------- 합성 ----------
 
-def _photo(media: Media | None, box: tuple[int, int, int, int], ov: Image.Image, out: Path) -> Path:
+def _photo(media: Media | None, box: tuple[int, int, int, int], ov: Image.Image, out: Path,
+           fg_h: int | None = None) -> Path:
     x, y, w, h = box
     base = Image.new("RGB", (W, H), (0, 0, 0))
     if media:
-        base.paste(render.cover_fit(media.path, w, h), (x, y))
+        base.paste(render.smart_fit(media.path, w, h, fg_h), (x, y))
     else:
         base.paste(render.fallback_bg(w, h), (x, y))
     img = Image.alpha_composite(base.convert("RGBA"), ov).convert("RGB")
@@ -137,7 +139,21 @@ def _run(cmd):
         raise RuntimeError(f"ffmpeg 실패: {r.stderr[-600:]}")
 
 
-def _video(media: Media, box: tuple[int, int, int, int], ov: Image.Image, out: Path) -> Path:
+def media_filter(path: Path, w: int, h: int, fg_h: int | None = None, inp: str = "1:v") -> str:
+    """ffmpeg 필터: 비율 비슷하면 꽉 채우기, 아니면 영상 전체 + 흐린 배경. 결과 라벨 [m]."""
+    vw, vh = video_size(path)
+    fg_h = fg_h or h
+    if not render.needs_contain(vw, vh, w, h):
+        return f"[{inp}]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps=30[m]"
+    return (f"[{inp}]split[va][vb];"
+            f"[va]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},boxblur=24:2,"
+            f"eq=brightness=-0.18,setsar=1[vbg];"
+            f"[vb]scale={w}:{fg_h}:force_original_aspect_ratio=decrease,setsar=1[vfg];"
+            f"[vbg][vfg]overlay=(main_w-overlay_w)/2:({fg_h}-overlay_h)/2,fps=30[m]")
+
+
+def _video(media: Media, box: tuple[int, int, int, int], ov: Image.Image, out: Path,
+           fg_h: int | None = None) -> Path:
     x, y, w, h = box
     ov_path = out.with_name(out.stem + "_ov.png")
     ov.save(ov_path)
@@ -152,7 +168,7 @@ def _video(media: Media, box: tuple[int, int, int, int], ov: Image.Image, out: P
     _run([FFMPEG, "-y", "-f", "lavfi", "-i", f"color=c=black:s={W}x{H}:r=30",
           "-i", str(media.path), "-loop", "1", "-i", str(ov_path), *a_in,
           "-filter_complex",
-          f"[1:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps=30[m];"
+          f"{media_filter(media.path, w, h, fg_h)};"
           f"[0:v][m]overlay={x}:{y}:eof_action=repeat[b];[b][2:v]overlay=0:0,format=yuv420p[v];{a_f}",
           "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
           "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-maxrate", "6M", "-bufsize", "12M",
@@ -172,8 +188,8 @@ def make_cover(media: Media | None, sub: str, title: str, out: Path) -> Path:
     ov = cover_overlay(sub, title, media.credit if media else "")
     box = (0, 0, W, H)
     if media and media.kind == "video":
-        return _video(media, box, ov, out)
-    return _photo(media, box, ov, out)
+        return _video(media, box, ov, out, COVER_FG_H)
+    return _photo(media, box, ov, out, COVER_FG_H)
 
 
 def make_slide(media: Media | None, kicker: str, heading: str, body: str, out: Path) -> Path:

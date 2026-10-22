@@ -25,7 +25,9 @@ COMMON_RULES = f"""
   "명품 매장들 탈탈 털리더니... 프랑스 길거리 근황", "현재 심각한 프랑스 시위 상태",
   "후쿠오카 우동 맛집 여기만 저장하세요!", "영화보다 영화 같은 삶"
 - 자극적이어도 사실을 비틀지 않는다. 원문에 없는 숫자, 인용, 사건을 지어내지 않는다.
-- 원문에 없는 건 아예 언급하지 않는다. 아래 같은 면책, 당부, 훈계성 문장은 절대 쓰지 않는다:
+- 원문과 web_search로 확인한 사실만 쓴다. 확인 안 된 건 아예 언급하지 않는다.
+- 원문이 짧거나 맥락이 부족하면 web_search로 이 사건의 배경을 1~3번 찾아서 맥락을 채운다 (언제, 어디서, 왜 화제인지).
+- 아래 같은 면책, 당부, 훈계성 문장은 절대 쓰지 않는다:
   "아직 확인되지 않았다", "공식 발표를 기다려야 한다", "지켜봐야 한다", "주의가 필요하다",
   "추측은 자제하자", "정확한 내용은 추후 확인", "~인 만큼 신중해야 한다"
   확인된 사실만 나열하고 거기서 끝낸다.
@@ -36,31 +38,37 @@ COMMON_RULES = f"""
 - image_query 는 스톡 사진 검색용 영어 키워드 2~4단어 (예: "paris protest police").
 - 출력은 JSON 하나만. 코드블록, 설명 없이.
 
-캡션 형식
-- 첫 줄: [제목 한 줄]
-- 빈 줄 후 본문 4~7줄. 무슨 일인지, 배경, 숫자, 반응 순. 한 줄에 한 문장.
-- 마지막 줄: 저장이나 팔로우 유도 한 줄 (예: "저장해두고 친구한테도 공유해주세요"). 해시태그는 caption에 넣지 않는다.
-- 캡션도 마침표 없이, 한 줄에 한 문장.
-- 캡션에 @아이디(계정 태그)를 쓰지 않는다.
+캡션 형식 (레퍼런스: today.worthy 같은 이슈 계정의 이야기체)
+- 존댓말 합니다체. 기자 보고서체(~했다, ~이다)나 딱딱한 나열 금지
+- 첫 줄: [제목을 문장으로] 예: [신입사원이 회장님 아들이 됐습니다] [루이비통 매장만 멀쩡했습니다]
+- 빈 줄 후 본문 3~4줄. 첫 줄은 🚨 같은 이모지 하나로 시작해도 좋다. 군더더기 없이 핵심만
+- 사진/영상을 묘사하지 말고 "무슨 일인지"를 이야기한다
+  나쁜 예: "매장 앞에 사람들이 몰려 있는 영상이 올라왔다", "조명도 멀쩡해 보인다", "게시자는 ~라고 평했다"
+  좋은 예: "폭동이 이어지는 파리에서 루이비통 매장 영상이 퍼지고 있습니다"
+          "주변 상점들이 털리는 와중에도 이 매장만 불이 켜진 채 그대로였습니다"
+- 흐름: 무슨 일인지 → 왜 화제인지(배경/맥락) → 핵심 숫자나 디테일 → 반응이나 의미
+- 문장끼리 자연스럽게 이어지게. 앞 문장을 받아서 다음 문장이 나오도록
+- 마지막 줄: 저장/공유 유도 한 줄 (예: 저장해두고 친구한테도 공유해주세요). 해시태그는 넣지 않는다
+- 마침표 없이, 한 줄에 한 문장. 캡션에 @아이디 쓰지 않는다
 """.strip()
 
 CARD_SPEC = """
 카드뉴스 JSON (레퍼런스: today.worthy):
 {
-  "cover_sub": "커버 첫 줄. 작은 글씨로 상황 설명, 22자 이내 (예: 22년 전 신입사원으로 들어간 회사)",
+  "cover_sub": "커버 첫 줄. 작은 글씨로 상황 설명, 18자 이내 (예: 22년 전 신입사원으로 들어간 회사)",
   "cover_title": "커버 둘째 줄. 큰 글씨 한 방, 14자 이내, 핵심 단어 1개 **강조** (예: 회장님 **아들**이 됐다)",
   "slides": [
-    {"kicker": "작은 라벨 14자 이내 (예: 신입사원에서 아들까지)",
+    {"kicker": "작은 라벨 12자 이내, 필요 없으면 빈 문자열 (예: 신입사원에서 아들까지)",
      "heading": "소제목. 2줄 이내(\\n), 줄당 14자 이내, 강조 1개 가능 (예: 주식 **10%**\\n이미 넘겨받았다)",
-     "body": "2~3문장, 문장마다 \\n, 전체 90자 이내. 구체적인 사실과 숫자",
+     "body": "1~2문장, 문장마다 \\n, 전체 60자 이내. 소제목을 반복하지 말고 꼭 필요한 사실/숫자 하나만",
      "image_query": "이 장에 쓸 스톡 사진 영어 키워드"}
   ],
   "share_target": "마지막 장 '___ 친구에게 보내주세요'에 들어갈 말, 위트 있게 14자 이내 (예: 회장님한테 입양 가고 싶은, 프랑스 사태 관심 있는)",
   "caption": "...",
   "hashtags": ["#...", "3~5개, 검색 많이 되는 핵심 키워드만"]
 }
-흐름: 무슨 일 → 배경 → 핵심 숫자/장면 → 반응/영향 → 한 줄 정리.
-slides 개수는 아래 지시를 정확히 따른다.
+글자는 최소로. 사진이 주인공이고 글은 거드는 역할. 같은 말 반복, 뻔한 수식어, 군더더기 금지.
+slides 개수는 아래 지시를 정확히 따른다 (0장일 수도 있다).
 """.strip()
 
 REEL_SPEC = """
@@ -163,12 +171,42 @@ def _image_block(path: Path) -> dict:
                                         "data": base64.b64encode(buf.getvalue()).decode()}}
 
 
-def _ask(system: str, user_content, max_tokens=4000) -> dict:
+SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
+
+
+def _final_text(blocks) -> str:
+    """검색을 했으면 마지막 검색 결과 뒤에 나온 글만 (JSON 앞의 '찾아볼게요' 같은 말 제외)."""
+    last_tool = -1
+    for i, b in enumerate(blocks):
+        if b.type in ("server_tool_use", "web_search_tool_result"):
+            last_tool = i
+    return "".join(b.text for b in blocks[last_tool + 1:] if b.type == "text")
+
+
+def _call(system, messages, max_tokens, search):
+    kwargs = dict(model=config.CLAUDE_MODEL, max_tokens=max_tokens, system=system, messages=messages)
+    if search:
+        kwargs["tools"] = [SEARCH_TOOL]
+    msg = client.messages.create(**kwargs)
+    turns = 0
+    while getattr(msg, "stop_reason", "") == "pause_turn" and turns < 3:  # 검색이 길어지면 이어서
+        kwargs["messages"] = messages + [{"role": "assistant", "content": msg.content}]
+        msg = client.messages.create(**kwargs)
+        turns += 1
+    return msg
+
+
+def _ask(system: str, user_content, max_tokens=4000, search=False) -> dict:
     messages = [{"role": "user", "content": user_content}]
     for attempt in range(2):
-        msg = client.messages.create(model=config.CLAUDE_MODEL, max_tokens=max_tokens, system=system,
-                                     messages=messages)
-        text = "".join(b.text for b in msg.content if b.type == "text")
+        try:
+            msg = _call(system, messages, max_tokens, search)
+        except anthropic.BadRequestError:
+            if not search:
+                raise
+            search = False  # 검색 도구를 못 쓰는 환경이면 검색 없이
+            msg = _call(system, messages, max_tokens, False)
+        text = _final_text(msg.content)
         try:
             return _parse_json(text)
         except Exception:
@@ -176,6 +214,7 @@ def _ask(system: str, user_content, max_tokens=4000) -> dict:
             messages += [{"role": "assistant", "content": text or "(빈 응답)"},
                          {"role": "user", "content": "설명이나 질문 없이, 주어진 소스만으로 최선을 다해 "
                                                      "스키마에 맞는 JSON 하나만 출력해."}]
+            search = False
     raise ValueError("원고를 못 만들었어요. 소스가 너무 짧거나 애매하면 내용을 조금 더 붙여서 보내주세요.")
 
 
@@ -219,7 +258,7 @@ def generate(kind: str, source: str, media_note: str = "", photos: list[Path] | 
         text += (f"\n\n이전 원고:\n{json.dumps(previous, ensure_ascii=False)}"
                  f"\n\n수정 요청: {feedback}\n반영해서 전체 JSON을 다시 출력해.")
     content = [_image_block(p) for p in (photos or [])[:10]] + [{"type": "text", "text": text}]
-    data = _ask(COMMON_RULES + "\n\n" + spec, content)
+    data = _ask(COMMON_RULES + "\n\n" + spec, content, max_tokens=6000, search=config.CONTEXT_SEARCH)
     if kind == "card":
         data["slides"] = data.get("slides", [])[:9]
     else:

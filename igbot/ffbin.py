@@ -35,3 +35,19 @@ def has_audio(path: Path) -> bool:
     r = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path)], capture_output=True,
                        text=True, encoding="utf-8", errors="ignore")
     return "Audio:" in r.stderr
+
+
+_SIZE = re.compile(r"Video:.*?(\d{2,5})x(\d{2,5})")
+
+
+def video_size(path: Path) -> tuple[int, int]:
+    """영상 가로x세로 (세로로 찍은 폰 영상의 회전 정보까지 반영)."""
+    r = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path)], capture_output=True,
+                       text=True, encoding="utf-8", errors="ignore")
+    m = _SIZE.search(r.stderr)
+    if not m:
+        return 0, 0
+    w, h = int(m.group(1)), int(m.group(2))
+    if re.search(r"rotat\w* (?:of )?-?(90|270)", r.stderr):
+        w, h = h, w
+    return w, h

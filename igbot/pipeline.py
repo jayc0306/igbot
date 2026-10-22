@@ -18,17 +18,27 @@ def _card_items(src: list[Media]) -> list[Media]:
     return src[:MAX_CARD_MEDIA]
 
 
+def _has_stock() -> bool:
+    return bool(config.PIXABAY_API_KEY or config.PEXELS_API_KEY)
+
+
 def _card_note(src: list[Media]) -> str:
+    """슬라이드 수 = 미디어 수에 맞춤. 사진 없는 빈 장을 만들지 않음."""
     items = _card_items(src)
     n = len(items)
     if n >= 2:
         return (f"첨부 미디어 {n}개가 순서대로 이미지로 주어진다 (영상은 한 장면 캡처). "
                 f"커버는 1번 미디어 위에, 본문 k번째 슬라이드는 (k+1)번 미디어 위에 올라간다. "
                 f"slides 는 정확히 {n - 1}장. 각 장 문구는 그 미디어에 보이는 장면과 맞게 써라.")
+    if n == 1 and _has_stock():
+        return ("첨부 미디어 1개 (커버에 쓰인다). slides 는 2장. "
+                "본문 사진은 image_query로 스톡 사진을 찾으니 장면이 떠오르는 영어 키워드를 넣어라.")
     if n == 1:
-        return ("첨부 미디어 1개 (커버에 쓰인다). slides 는 3장. "
-                "본문 슬라이드 사진은 image_query로 스톡 사진을 찾으니 장면이 떠오르는 키워드를 넣어라.")
-    return "첨부 미디어 없음. slides 는 3~4장. 각 장 image_query로 스톡 사진을 찾는다."
+        return ("첨부 미디어 1개 (커버에 쓰인다). slides 는 0장 (빈 배열). "
+                "커버 한 장 + 마지막 장으로 끝나니, 핵심은 커버 제목과 캡션에 담아라.")
+    if _has_stock():
+        return "첨부 미디어 없음. slides 는 2~3장. 각 장 image_query로 스톡 사진을 찾는다."
+    return "첨부 미디어 없음. slides 는 2장."
 
 
 def _reel_note(src: list[Media]) -> str:
@@ -44,7 +54,7 @@ async def _card_media(data: dict, src: list[Media], out: Path) -> list[Media | N
     items = _card_items(src)
     n = 1 + len(data["slides"])
     queries = [None] + [s.get("image_query") for s in data["slides"]]
-    has_stock = bool(config.PIXABAY_API_KEY or config.PEXELS_API_KEY)
+    has_stock = _has_stock()
     res: list[Media | None] = []
     for i in range(n):
         if i < len(items):
