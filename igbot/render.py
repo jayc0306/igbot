@@ -3,6 +3,7 @@
 카드뉴스 1080x1350: 사진 풀블리드 + 하단 그라데이션 + 굵은 흰 제목
 릴스 1080x1920: 검은 배경, 상단 라벨+제목 고정, 가운데 영상, 아래 브랜드 / 영상 위 자막 박스
 """
+import re
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -20,7 +21,9 @@ _font_cache: dict = {}
 def font(weight: str, size: int) -> ImageFont.FreeTypeFont:
     key = (weight, size)
     if key not in _font_cache:
-        _font_cache[key] = ImageFont.truetype(str(config.FONT_DIR / f"Pretendard-{weight}.otf"), size)
+        # BASIC 레이아웃: 한글은 복잡한 조판(raqm)이 필요 없고, 서버 환경에 따라 raqm이 터지는 문제 방지
+        _font_cache[key] = ImageFont.truetype(str(config.FONT_DIR / f"Pretendard-{weight}.otf"), size,
+                                              layout_engine=ImageFont.Layout.BASIC)
     return _font_cache[key]
 
 
@@ -31,7 +34,19 @@ def rgb(h: str) -> tuple:
 
 # ---------- 리치 텍스트 (**강조**) ----------
 
+_UNRENDERABLE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002700-\U000027BF\U00002600-\U000026FF\U0001F900-\U0001F9FF"
+    "\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufe00-\ufe0f\u0600-\u06ff\u0590-\u05ff"
+    "\x00-\x09\x0b-\x1f\x7f]")
+
+
+def safe_text(text: str) -> str:
+    """폰트에 없는 글자(이모지, 아랍어 등)와 보이지 않는 제어문자 제거."""
+    return re.sub(r"[ \t]{2,}", " ", _UNRENDERABLE.sub("", text or "")).strip(" ")
+
+
 def parse_rich(text: str) -> list[tuple[str, bool]]:
+    text = safe_text(text)
     out, hl, i = [], False, 0
     while i < len(text):
         if text.startswith("**", i):
@@ -187,6 +202,7 @@ def bottom_gradient(img: Image.Image, start_y: int, max_alpha: int = 235) -> Ima
 
 
 def _credit(d, text, x_right, y, size=22, fill=(200, 200, 200)):
+    text = safe_text(text).replace("\n", " ")
     if not text:
         return
     f = font("Regular", size)
@@ -327,6 +343,7 @@ def reel_background(label: str, title: str, out: Path) -> int:
     d = ImageDraw.Draw(img)
 
     y = 250
+    label = safe_text(label)
     if label:
         lf = font("Bold", 40)
         lw = lf.getlength(label) + 40
@@ -366,6 +383,7 @@ def reel_overlay(subtitle: str, credit: str, media_y: int, out: Path):
         d.rectangle((x0, top, REEL_W - x0, bottom), fill=(0, 0, 0, 225))
         draw_block(d, 100, top + 10, lines, f, size, 1.3, "#FFFFFF", config.COLOR_ACCENT,
                    align="center", box_w=REEL_W - 200)
+    credit = safe_text(credit or "").replace("\n", " ")
     if credit:
         cf = font("Regular", 22)
         credit = credit[:60]

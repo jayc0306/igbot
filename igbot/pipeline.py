@@ -185,7 +185,13 @@ async def make(job: dict, feedback: str | None = None, progress=None, rerender: 
         data = await asyncio.to_thread(content.generate, kind, job["source"], note,
                                        [m.path for m in look], feedback, prev)
         job["data"] = data
-    job["caption"] = content.build_caption(data, job.get("sources"))
+    # 사용자가 직접 정한 제목/캡션은 항상 우선
+    if job.get("title_override"):
+        data["cover_title" if kind == "card" else "title"] = job["title_override"]
+    job["caption"] = job.get("caption_override") or content.build_caption(data, job.get("sources"))
+    if job.get("title_override") and not job.get("caption_override") and job["caption"].startswith("["):
+        first, _, rest_cap = job["caption"].partition("\n")
+        job["caption"] = f"[{job['title_override'].replace('**', '')}]\n{rest_cap}"
 
     if kind == "card":
         has_video = any(m.kind == "video" for m in _card_items(src))

@@ -6,6 +6,7 @@
 import asyncio
 import html
 import logging
+import re
 import shutil
 import uuid
 from datetime import time as dtime
@@ -108,6 +109,57 @@ def extract_urls(msg) -> list[str]:
     return [u for u in dict.fromkeys(urls) if "t.me/" not in u]
 
 
+# "제목: ...", "출처 X로 해줘", "캡션: ..." 같은 직접 수정 명령
+EDIT_RE = re.compile(r"^\s*(출처|제목|캡션)(?:을|를|은|는|이|가)?\s*[:：]?\s*(.*)$", re.S)
+TRAIL_RE = re.compile(r"(?:\s*(?:으로|로))?\s*(?:이걸로\s*)?(?:해\s*줘|해\s*주세요|하고|수정해\s*줘|수정|변경|"
+                      r"바꿔\s*줘|바꿔\s*주세요|바꿔|해)\s*[.!~]*\s*$")
+
+
+def parse_edits(text: str) -> tuple[dict, str]:
+    """returns ({'출처': 'X', '제목': '...', '캡션': '...'}, 나머지 수정 요청 글)."""
+    t = text.strip()
+    m = EDIT_RE.match(t)
+    if m and m.group(1) == "캡션":  # 캡션은 여러 줄 통째로
+        return {"캡션": m.group(2).strip()}, ""
+    edits, rest = {}, []
+    for seg in re.split(r"(?:\n|,|，)\s*(?=(?:출처|제목|캡션))", t):
+        m = EDIT_RE.match(seg)
+        val = m.group(2).strip() if m else ""
+        if m and m.group(1) == "제목":
+            # "제목: OO" 또는 "제목을 OO로 바꿔줘" 처럼 확실할 때만 직접 지정. "제목 더 세게"는 원고 수정 요청
+            explicit = (re.match(r"^\s*제목\w?\s*[:：]", seg) or re.search(r"(?:으로|로)\s*(?:바꿔|해|수정|변경)", seg)
+                        or "이걸로" in seg)
+            if not explicit:
+                m = None
+        if m and val:
+            val = TRAIL_RE.sub("", val).strip().strip("\"'“”‘’")
+            if m.group(1) == "출처":
+                val = re.sub(r"\s+(?:으로|로)$", "", val)
+            edits[m.group(1)] = val
+        elif seg.strip():
+            rest.append(seg.strip())
+    return edits, "\n".join(rest)
+
+
+async def apply_edits(ctx, jid: str, edits: dict, rest: str):
+    job = JOBS[jid]
+    if "출처" in edits:
+        v = edits["출처"]
+        job["source_override"] = "" if v in ("없음", "삭제", "-", "빼줘") else v
+    if "제목" in edits:
+        job["title_override"] = edits["제목"]
+    if "캡션" in edits:
+        job["caption_override"] = edits["캡션"]
+        if not rest and len(edits) == 1:
+            job["caption"] = edits["캡션"]
+            await send_caption(ctx, jid)
+            return
+    if rest:
+        await produce(ctx, jid, feedback=rest)          # 원고 다시 쓰기 (제목/출처 지정은 유지)
+    else:
+        await produce(ctx, jid, rerender=True)          # 원고 그대로, 이미지/영상만 다시
+
+
 def new_job(chat_id: int, raw: str = "", kind=None) -> str:
     jid = uuid.uuid4().hex[:8]
     d = config.WORK_DIR / jid
@@ -171,6 +223,8 @@ async def produce(ctx, jid, feedback=None, rerender=False):
                                reply_markup=InlineKeyboardMarkup([[B("🔄 다시 시도", callback_data=f"re|{jid}")]]))
         return
 
+    if getattr(ctx, "user_data", None) is not None:
+        ctx.user_data["last_job"] = jid
     if config.AUTO_PUBLISH and not MANUAL:
         await publish(ctx, jid)
     else:
@@ -380,25 +434,26 @@ async def on_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # 출처 수정 대기 중
     src_jid = ctx.user_data.pop("source_job", None)
     if src_jid and src_jid in JOBS and text:
-        val = text.removeprefix("출처:").strip()
-        JOBS[src_jid]["source_override"] = "" if val in ("없음", "없애", "삭제", "-") else val
-        await produce(ctx, src_jid, rerender=True)
+        edits, rest = parse_edits(text)
+        if not edits:
+            edits = {"출처": TRAIL_RE.sub("", text).strip()}
+        await apply_edits(ctx, src_jid, edits, rest)
         return
 
     # 수정 요청 대기 중이면 피드백으로 처리
     fb_jid = ctx.user_data.pop("feedback_job", None)
     if fb_jid and fb_jid in JOBS and text:
-        job = JOBS[fb_jid]
-        if text.startswith("출처:"):
-            val = text[3:].strip()
-            job["source_override"] = "" if val in ("없음", "삭제", "-") else val
-            await produce(ctx, fb_jid, rerender=True)
-        elif text.startswith("캡션:"):
-            job["caption"] = text[3:].strip()
-            await send_caption(ctx, fb_jid)
-        else:
-            await produce(ctx, fb_jid, feedback=text)
+        edits, rest = parse_edits(text)
+        await apply_edits(ctx, fb_jid, edits, rest)
         return
+
+    # 수정 버튼 없이 바로 "제목: ..." / "출처: ..." 를 보내면 방금 만든 결과물을 수정
+    last = ctx.user_data.get("last_job")
+    if text and not msg.photo and not msg.video and last in JOBS and JOBS[last].get("files"):
+        edits, rest = parse_edits(text)
+        if edits:
+            await apply_edits(ctx, last, edits, rest)
+            return
 
     # 앨범(여러 장 묶음)은 같은 작업으로 모은 뒤 한 번만 물어봄
     albums = ctx.chat_data.setdefault("albums", {})
@@ -481,8 +536,10 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data.pop("source_job", None)
         ctx.user_data["feedback_job"] = jid
         await q.message.reply_text(
-            "수정할 내용을 보내주세요. (예: 제목 더 세게, 2번 슬라이드 숫자 빼줘)\n"
-            "'캡션:'으로 시작하면 캡션만 그대로 교체합니다.")
+            "수정할 내용을 보내주세요\n\n"
+            "• 직접 지정: 제목: 원하는 제목 / 출처: X / 캡션: 원하는 캡션\n"
+            "• 그 외 요청: 제목 더 세게, 2번 장 숫자 빼줘 같은 말은 원고를 다시 써요\n"
+            "여러 개는 줄바꿈이나 쉼표로 같이 보내도 돼요")
     elif action == "src":
         ctx.user_data.pop("feedback_job", None)
         ctx.user_data["source_job"] = jid

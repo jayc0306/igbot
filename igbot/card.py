@@ -48,6 +48,7 @@ def _gradient(overlay: Image.Image, y0: int, y1: int, max_alpha: int = 255):
 
 
 def _credit(d, text: str):
+    text = render.safe_text(text).replace("\n", " ")
     if not text:
         return
     f = render.font("Regular", 22)
@@ -100,6 +101,7 @@ def slide_overlay(kicker: str, heading: str, body: str, credit: str) -> Image.Im
         if bh <= 170 or bs <= 28:
             break
         bs -= 2
+    kicker = render.safe_text(kicker)
     kf = render.font("Bold", 32)
     kh = 32 + 20 if kicker else 0
 
